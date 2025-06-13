@@ -1,34 +1,21 @@
 import streamlit as st
 import pandas as pd
-from sqlalchemy import create_engine, text
+import gspread
 from datetime import datetime, date
 import io
 
-# SQLite DB setup
-engine = create_engine("sqlite:///project_tasks.db")
+# --- Authenticate and load sheet ---
+gc = gspread.service_account(filename="credentials.json")
+sheet = gc.open("Project_Tasks").sheet1  # Update name if needed
 
-# Create table (assumes plan_date column already exists)
-def create_table():
-    with engine.connect() as conn:
-        conn.execute(text('''
-        CREATE TABLE IF NOT EXISTS tasks (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            client_name TEXT,
-            project_name TEXT,
-            unit TEXT,
-            resource_name TEXT,
-            submission_date TEXT,
-            plan_date TEXT,
-            status TEXT,
-            remarks TEXT
-        )
-        '''))
-create_table()
+# --- Load data ---
+data = sheet.get_all_records()
+df = pd.DataFrame(data)
 
 st.title("RDA Firm Project Assistant")
 st.subheader("📋 Enter New Task Details")
 
-# --- Task Submission Form ---
+# --- Add New Task ---
 with st.form("task_form"):
     client_name = st.text_input("Client Name")
     project_name = st.text_input("Project Name")
@@ -41,30 +28,16 @@ with st.form("task_form"):
     submitted = st.form_submit_button("Submit Task")
 
 if submitted:
-    with engine.begin() as conn:
-        conn.execute(
-            text("""
-                INSERT INTO tasks (client_name, project_name, unit, resource_name, submission_date, plan_date, status, remarks)
-                VALUES (:client_name, :project_name, :unit, :resource_name, :submission_date, :plan_date, :status, :remarks)
-            """),
-            {
-                "client_name": client_name,
-                "project_name": project_name,
-                "unit": unit,
-                "resource_name": resource_name,
-                "submission_date": str(submission_date),
-                "plan_date": str(plan_date),
-                "status": status,
-                "remarks": remarks
-            }
-        )
+    sheet.append_row([
+        client_name, project_name, unit, resource_name,
+        str(submission_date), str(plan_date), status, remarks
+    ])
     st.success("✅ Task added successfully!")
     st.rerun()
 
 # --- Task Table Display ---
 st.subheader("📊 Current Task Table")
-df = pd.read_sql("SELECT * FROM tasks limit 8", con=engine)
-st.dataframe(df)
+st.dataframe(df.head(8))  # Limit rows like original
 
 # --- Download Button ---
 if not df.empty:
@@ -84,78 +57,47 @@ if not df.empty:
 # --- Edit Existing Tasks ---
 st.subheader("✏️ Edit Existing Task")
 
-project_names = pd.read_sql("SELECT DISTINCT project_name FROM tasks", con=engine)
+if not df.empty:
+    project_names = df['Project_name'].unique().tolist()
+    selected_project = st.selectbox("Select a Project to Edit", project_names)
 
-if not project_names.empty:
-    selected_project = st.selectbox("Select a Project to Edit", project_names['project_name'])
-    project_df = pd.read_sql(
-        "SELECT * FROM tasks WHERE project_name = :project_name",
-        con=engine,
-        params={"project_name": selected_project}
-    )
+    project_df = df[df['Project_name'] == selected_project]
     st.dataframe(project_df)
 
-    row_to_edit = st.selectbox("Select Row ID to Edit", project_df['id'])
-    row_data = project_df[project_df['id'] == row_to_edit].iloc[0]
+    editable_indices = project_df.index.tolist()
+    row_to_edit = st.selectbox("Select Row ID to Edit", editable_indices)
 
-    # Safe parsing of plan_date
-    default_plan_date = date.today()
-    if row_data['plan_date']:
-        try:
-            default_plan_date = pd.to_datetime(row_data['plan_date']).date()
-        except:
-            pass
+    row_data = df.loc[row_to_edit]
+    default_plan_date = pd.to_datetime(row_data['Plan_date']).date() if row_data['Plan_date'] else date.today()
 
     with st.form("edit_form"):
-        unit_edit = st.text_input("Unit", row_data['unit'])
-        resource_edit = st.text_input("Resource Name", row_data['resource_name'])
+        unit_edit = st.text_input("Unit", row_data['Unit'])
+        resource_edit = st.text_input("Resource Name", row_data['Resource_Name'])
         plan_date_edit = st.date_input("Planned Date", default_plan_date)
-        status_edit = st.selectbox(
-            "Status",
-            ["Not Started", "In Progress", "Completed"],
-            index=["Not Started", "In Progress", "Completed"].index(row_data['status'])
-        )
-        remarks_edit = st.text_area("Remarks", row_data['remarks'])
+        status_edit = st.selectbox("Status", ["Not Started", "In Progress", "Completed"], index=["Not Started", "In Progress", "Completed"].index(row_data['Status']))
+        remarks_edit = st.text_area("Remarks", row_data['Remarks'])
         submitted_edit = st.form_submit_button("Update Task")
 
     if submitted_edit:
-        with engine.begin() as conn:
-            conn.execute(
-                text("""
-                    UPDATE tasks
-                    SET unit = :unit,
-                        resource_name = :resource,
-                        plan_date = :plan_date,
-                        status = :status,
-                        remarks = :remarks
-                    WHERE id = :row_id
-                """),
-                {
-                    "unit": unit_edit,
-                    "resource": resource_edit,
-                    "plan_date": str(plan_date_edit),
-                    "status": status_edit,
-                    "remarks": remarks_edit,
-                    "row_id": row_to_edit
-                }
-            )
+        row_number = row_to_edit + 2  # +2 because header is row 1 and gspread is 1-indexed
+        sheet.update(f'C{row_number}', [[unit_edit]])
+        sheet.update(f'D{row_number}', [[resource_edit]])
+        sheet.update(f'F{row_number}', [[str(plan_date_edit)]])
+        sheet.update(f'G{row_number}', [[status_edit]])
+        sheet.update(f'H{row_number}', [[remarks_edit]])
         st.success("✅ Task updated successfully!")
         st.rerun()
 else:
-    st.info("ℹ️ No projects found. Add a task first.")
+    st.info("ℹ️ No tasks found. Add a task first.")
 
 # --- Add New Unit to Existing Project ---
 st.subheader("➕ Add New Unit to Existing Project")
 
-if not project_names.empty:
-    selected_project_for_new_unit = st.selectbox("Select Project to Add New Unit", project_names['project_name'], key="add_unit")
+if not df.empty:
+    selected_project_for_new_unit = st.selectbox("Select Project to Add New Unit", project_names, key="add_unit")
 
-    client_info = pd.read_sql(
-        "SELECT DISTINCT client_name FROM tasks WHERE project_name = :project_name",
-        con=engine,
-        params={"project_name": selected_project_for_new_unit}
-    )
-    default_client = client_info['client_name'].iloc[0] if not client_info.empty else ""
+    client_info = df[df['Project_name'] == selected_project_for_new_unit]['Client_name'].values
+    default_client = client_info[0] if len(client_info) > 0 else ""
 
     with st.form("add_unit_form"):
         client_name_new = st.text_input("Client Name", value=default_client, disabled=True)
@@ -169,23 +111,10 @@ if not project_names.empty:
         add_unit_submitted = st.form_submit_button("Add Unit")
 
     if add_unit_submitted:
-        with engine.begin() as conn:
-            conn.execute(
-                text("""
-                    INSERT INTO tasks (client_name, project_name, unit, resource_name, submission_date, plan_date, status, remarks)
-                    VALUES (:client_name, :project_name, :unit, :resource_name, :submission_date, :plan_date, :status, :remarks)
-                """),
-                {
-                    "client_name": default_client,
-                    "project_name": selected_project_for_new_unit,
-                    "unit": unit_new,
-                    "resource_name": resource_new,
-                    "submission_date": str(submission_date_new),
-                    "plan_date": str(plan_date_new),
-                    "status": status_new,
-                    "remarks": remarks_new
-                }
-            )
+        sheet.append_row([
+            client_name_new, project_name_new, unit_new, resource_new,
+            str(submission_date_new), str(plan_date_new), status_new, remarks_new
+        ])
         st.success("✅ New unit added under the existing project!")
         st.rerun()
 else:
