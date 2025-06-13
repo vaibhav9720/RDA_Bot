@@ -3,9 +3,13 @@ import pandas as pd
 import gspread
 from datetime import datetime, date
 import io
-
+import json
 # --- Authenticate and load sheet ---
-gc = gspread.service_account(filename="credentials.json")
+#Uncomment Below line when running on local & past the credentials file from Buddy Bot
+#gc = gspread.service_account(filename="credentials.json")
+#Code To read credentials from cloud
+creds_dict = json.loads(st.secrets["GSPREAD_CREDENTIALS"])
+gc = gspread.service_account_from_dict(creds_dict)
 sheet = gc.open("Project_Tasks").sheet1  # Update name if needed
 
 # --- Load data ---
