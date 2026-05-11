@@ -719,7 +719,7 @@ with tab5:
                         "Status",
                         lambda x: (x != "Completed").sum()
                     ),
-                    Avg_Priority=("Priority", "mean"),
+                    Avg_Priority=("Priority", lambda x: round(x.mean(), 1)),
                     Overdue_Tasks=("Is_Overdue", "sum")
                 )
                 .reset_index()
