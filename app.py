@@ -138,7 +138,39 @@ def load_data(sheet):
     data = sheet.get_all_records()
     return pd.DataFrame(data)
 
+def prepare_dashboard_data(df):
+    dash_df = df.copy()
 
+    dash_df["Plan_Date_Parsed"] = pd.to_datetime(
+        dash_df["Plan_date"].astype(str),
+        format="%d%m%y",
+        errors="coerce"
+    )
+
+    dash_df["Submission_Date_Parsed"] = pd.to_datetime(
+        dash_df["Submission_date"].astype(str),
+        format="%d%m%y",
+        errors="coerce"
+    )
+
+    today = pd.Timestamp.today().normalize()
+
+    dash_df["Days_Left"] = (
+        dash_df["Plan_Date_Parsed"] - today
+    ).dt.days
+
+    dash_df["Is_Overdue"] = (
+        (dash_df["Days_Left"] < 0) &
+        (dash_df["Status"] != "Completed")
+    )
+
+    dash_df["Approaching_Deadline"] = (
+        (dash_df["Days_Left"] >= 0) &
+        (dash_df["Days_Left"] <= 7) &
+        (dash_df["Status"] != "Completed")
+    )
+
+    return dash_df
 sheet = connect_to_sheet()
 df = load_data(sheet)
 
@@ -180,11 +212,12 @@ if not df.empty:
 st.markdown("<br>", unsafe_allow_html=True)
 
 
-tab1, tab2, tab3, tab4 = st.tabs([
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "➕ New Details",
     "✏️ Edit Details",
     "➕ Add New Unit",
-    "📊 View Tasks"
+    "📊 View Tasks",
+    "📈 Dashboard"
 ])
 
 
@@ -540,3 +573,230 @@ with tab4:
             file_name="project_tasks.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
+# ---------------- TAB 5: DASHBOARD ----------------
+with tab5:
+    st.subheader("Project Dashboard")
+
+    if df.empty:
+        st.info("No data available for dashboard.")
+
+    else:
+        dash_df = prepare_dashboard_data(df)
+
+        total_tasks = len(dash_df)
+        completed_tasks = len(
+            dash_df[dash_df["Status"] == "Completed"]
+        )
+        pending_tasks = len(
+            dash_df[dash_df["Status"] != "Completed"]
+        )
+        overdue_tasks = dash_df["Is_Overdue"].sum()
+        approaching_tasks = dash_df["Approaching_Deadline"].sum()
+
+        completion_rate = round(
+            (completed_tasks / total_tasks) * 100, 1
+        ) if total_tasks > 0 else 0
+
+        st.markdown("### Overall Summary")
+
+        c1, c2, c3, c4, c5 = st.columns(5)
+
+        with c1:
+            st.metric("Total Tasks", total_tasks)
+
+        with c2:
+            st.metric("Completed", completed_tasks)
+
+        with c3:
+            st.metric("Pending", pending_tasks)
+
+        with c4:
+            st.metric("Overdue", int(overdue_tasks))
+
+        with c5:
+            st.metric("Completion %", f"{completion_rate}%")
+
+        st.markdown("---")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown("### Projects Approaching Deadline")
+
+            deadline_df = dash_df[
+                dash_df["Approaching_Deadline"]
+            ][[
+                "Project_name",
+                "Unit",
+                "Resource_Name",
+                "Plan_date",
+                "Days_Left",
+                "Priority",
+                "Status"
+            ]].sort_values("Days_Left")
+
+            if deadline_df.empty:
+                st.success("No projects approaching deadline.")
+            else:
+                st.dataframe(
+                    deadline_df,
+                    use_container_width=True,
+                    height=280
+                )
+
+        with col2:
+            st.markdown("### Overdue Tasks")
+
+            overdue_df = dash_df[
+                dash_df["Is_Overdue"]
+            ][[
+                "Project_name",
+                "Unit",
+                "Resource_Name",
+                "Plan_date",
+                "Days_Left",
+                "Priority",
+                "Status"
+            ]].sort_values("Days_Left")
+
+            if overdue_df.empty:
+                st.success("No overdue tasks.")
+            else:
+                st.dataframe(
+                    overdue_df,
+                    use_container_width=True,
+                    height=280
+                )
+
+        st.markdown("---")
+
+        col3, col4 = st.columns(2)
+
+        with col3:
+            st.markdown("### Workload by Employee")
+
+            employee_workload = (
+                dash_df[dash_df["Status"] != "Completed"]
+                .groupby("Resource_Name")
+                .size()
+                .reset_index(name="Pending_Tasks")
+                .sort_values("Pending_Tasks", ascending=False)
+            )
+
+            if employee_workload.empty:
+                st.info("No pending workload found.")
+            else:
+                st.bar_chart(
+                    employee_workload,
+                    x="Resource_Name",
+                    y="Pending_Tasks"
+                )
+
+                st.dataframe(
+                    employee_workload,
+                    use_container_width=True,
+                    height=220
+                )
+
+        with col4:
+            st.markdown("### Project Level Metrics")
+
+            project_metrics = (
+                dash_df
+                .groupby("Project_name")
+                .agg(
+                    Total_Tasks=("Project_name", "count"),
+                    Completed_Tasks=(
+                        "Status",
+                        lambda x: (x == "Completed").sum()
+                    ),
+                    Pending_Tasks=(
+                        "Status",
+                        lambda x: (x != "Completed").sum()
+                    ),
+                    Avg_Priority=("Priority", "mean"),
+                    Overdue_Tasks=("Is_Overdue", "sum")
+                )
+                .reset_index()
+            )
+
+            project_metrics["Completion_%"] = round(
+                (
+                    project_metrics["Completed_Tasks"] /
+                    project_metrics["Total_Tasks"]
+                ) * 100,
+                1
+            )
+
+            st.dataframe(
+                project_metrics,
+                use_container_width=True,
+                height=350
+            )
+
+        st.markdown("---")
+
+        col5, col6 = st.columns(2)
+
+        with col5:
+            st.markdown("### Task Status Distribution")
+
+            status_summary = (
+                dash_df["Status"]
+                .value_counts()
+                .reset_index()
+            )
+
+            status_summary.columns = ["Status", "Count"]
+
+            st.bar_chart(
+                status_summary,
+                x="Status",
+                y="Count"
+            )
+
+        with col6:
+            st.markdown("### Work Type Distribution")
+
+            work_type_summary = (
+                dash_df["Work_Type"]
+                .value_counts()
+                .reset_index()
+            )
+
+            work_type_summary.columns = [
+                "Work_Type",
+                "Count"
+            ]
+
+            st.bar_chart(
+                work_type_summary,
+                x="Work_Type",
+                y="Count"
+            )
+
+        st.markdown("---")
+
+        st.markdown("### High Priority Pending Work")
+
+        high_priority_df = dash_df[
+            (dash_df["Status"] != "Completed") &
+            (dash_df["Priority"].astype(str).isin(["1", "2"]))
+        ][[
+            "Project_name",
+            "Unit",
+            "Resource_Name",
+            "Plan_date",
+            "Priority",
+            "Status",
+            "Comments"
+        ]]
+
+        if high_priority_df.empty:
+            st.success("No high-priority pending work.")
+        else:
+            st.dataframe(
+                high_priority_df,
+                use_container_width=True,
+                height=300
+            )
