@@ -12,6 +12,109 @@ st.set_page_config(
 )
 
 
+# ---------------- CSS ----------------
+st.markdown("""
+<style>
+    .block-container {
+        padding-top: 2rem;
+        padding-bottom: 2rem;
+        max-width: 95%;
+    }
+
+    h1 {
+        font-size: 42px !important;
+        font-weight: 800 !important;
+        color: #1f2937;
+        margin-bottom: 0.5rem;
+    }
+
+    h2, h3 {
+        color: #111827;
+        font-weight: 700 !important;
+    }
+
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 12px;
+        border-bottom: 1px solid #e5e7eb;
+    }
+
+    .stTabs [data-baseweb="tab"] {
+        height: 45px;
+        padding: 10px 18px;
+        background-color: #f3f4f6;
+        border-radius: 12px 12px 0 0;
+        font-weight: 600;
+    }
+
+    .stTabs [aria-selected="true"] {
+        background-color: #2563eb !important;
+        color: white !important;
+    }
+
+    div[data-testid="stForm"] {
+        background-color: #ffffff;
+        padding: 24px;
+        border-radius: 18px;
+        border: 1px solid #e5e7eb;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+    }
+
+    div[data-testid="stTextInput"] input,
+    div[data-testid="stDateInput"] input,
+    div[data-testid="stTextArea"] textarea {
+        border-radius: 10px;
+        border: 1px solid #d1d5db;
+        background-color: #f9fafb;
+    }
+
+    .stSelectbox div[data-baseweb="select"] {
+        border-radius: 10px;
+        background-color: #f9fafb;
+    }
+
+    .stButton button,
+    .stDownloadButton button,
+    div[data-testid="stFormSubmitButton"] button {
+        background-color: #2563eb;
+        color: white;
+        border-radius: 12px;
+        padding: 10px 24px;
+        font-weight: 700;
+        border: none;
+    }
+
+    .stButton button:hover,
+    .stDownloadButton button:hover,
+    div[data-testid="stFormSubmitButton"] button:hover {
+        background-color: #1d4ed8;
+        color: white;
+    }
+
+    .metric-card {
+        background: linear-gradient(135deg, #2563eb, #1e40af);
+        padding: 18px;
+        border-radius: 18px;
+        color: white;
+        box-shadow: 0 8px 20px rgba(0,0,0,0.12);
+    }
+
+    .section-card {
+        background-color: #f9fafb;
+        padding: 18px;
+        border-radius: 16px;
+        border: 1px solid #e5e7eb;
+        margin-bottom: 18px;
+    }
+
+    label {
+        font-weight: 600 !important;
+        color: #374151 !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+
+# ---------------- FUNCTIONS ----------------
 def format_date_ddmmyy(input_date):
     return input_date.strftime("%d%m%y")
 
@@ -39,7 +142,43 @@ def load_data(sheet):
 sheet = connect_to_sheet()
 df = load_data(sheet)
 
+
+# ---------------- HEADER ----------------
 st.title("RDA Firm Project Assistant")
+st.caption("Manage project tasks, priorities, revisions and planned completion dates.")
+
+if not df.empty:
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        st.markdown(
+            f"<div class='metric-card'><h3>{len(df)}</h3><p>Total Tasks</p></div>",
+            unsafe_allow_html=True
+        )
+
+    with col2:
+        completed = len(df[df["Status"] == "Completed"])
+        st.markdown(
+            f"<div class='metric-card'><h3>{completed}</h3><p>Completed</p></div>",
+            unsafe_allow_html=True
+        )
+
+    with col3:
+        pending = len(df[df["Status"] != "Completed"])
+        st.markdown(
+            f"<div class='metric-card'><h3>{pending}</h3><p>Pending</p></div>",
+            unsafe_allow_html=True
+        )
+
+    with col4:
+        projects = df["Project_name"].nunique()
+        st.markdown(
+            f"<div class='metric-card'><h3>{projects}</h3><p>Projects</p></div>",
+            unsafe_allow_html=True
+        )
+
+st.markdown("<br>", unsafe_allow_html=True)
+
 
 tab1, tab2, tab3, tab4 = st.tabs([
     "➕ New Details",
@@ -49,44 +188,38 @@ tab1, tab2, tab3, tab4 = st.tabs([
 ])
 
 
-# ---------------- TAB 1: NEW DETAILS ----------------
+# ---------------- TAB 1 ----------------
 with tab1:
     st.subheader("Enter New Task Details")
 
     with st.form("new_task_form"):
-        client_name = st.text_input("Client Name")
-        project_name = st.text_input("Project Name")
-        unit = st.text_input("Unit")
-        resource_name = st.text_input("Resource Name")
+        col1, col2, col3 = st.columns(3)
 
-        submission_date = st.date_input(
-            "Date of Submission",
-            date.today()
-        )
+        with col1:
+            client_name = st.text_input("Client Name")
+            project_name = st.text_input("Project Name")
+            unit = st.text_input("Unit")
 
-        plan_date = st.date_input(
-            "Planned Date of Completion",
-            date.today()
-        )
+        with col2:
+            resource_name = st.text_input("Resource Name")
+            submission_date = st.date_input("Date of Submission", date.today())
+            plan_date = st.date_input("Planned Date", date.today())
 
-        status = st.selectbox(
-            "Status",
-            ["Not Started", "In Progress", "Completed"]
-        )
+        with col3:
+            status = st.selectbox(
+                "Status",
+                ["Not Started", "In Progress", "Completed"]
+            )
+            work_type = st.selectbox("Work Type", ["Fresh", "Revision"])
+            priority = st.selectbox("Priority", [1, 2, 3, 4, 5])
 
-        work_type = st.selectbox(
-            "Work Type",
-            ["Fresh", "Revision"]
-        )
+        col4, col5 = st.columns(2)
 
-        comments = st.text_area("Comments")
+        with col4:
+            comments = st.text_area("Comments", height=90)
 
-        priority = st.selectbox(
-            "Priority",
-            [1, 2, 3, 4, 5]
-        )
-
-        remarks = st.text_area("Remarks")
+        with col5:
+            remarks = st.text_area("Remarks", height=90)
 
         submitted = st.form_submit_button("Submit Task")
 
@@ -104,12 +237,11 @@ with tab1:
             priority,
             remarks
         ])
-
         st.success("Task added successfully!")
         st.rerun()
 
 
-# ---------------- TAB 2: EDIT DETAILS ----------------
+# ---------------- TAB 2 ----------------
 with tab2:
     st.subheader("Edit Existing Task")
 
@@ -133,10 +265,7 @@ with tab2:
     ]
 
     if missing_columns:
-        st.error(
-            "Missing columns in Google Sheet: "
-            + ", ".join(missing_columns)
-        )
+        st.error("Missing columns: " + ", ".join(missing_columns))
 
     elif df.empty:
         st.info("No tasks available to edit.")
@@ -144,109 +273,114 @@ with tab2:
     else:
         project_names = df["Project_name"].dropna().unique().tolist()
 
-        selected_project = st.selectbox(
-            "Select Project to Edit",
-            project_names
-        )
+        col_a, col_b = st.columns([1, 2])
 
-        project_df = df[
-            df["Project_name"] == selected_project
-        ]
+        with col_a:
+            selected_project = st.selectbox(
+                "Select Project to Edit",
+                project_names
+            )
 
-        st.dataframe(project_df, use_container_width=True)
+        project_df = df[df["Project_name"] == selected_project]
 
-        row_to_edit = st.selectbox(
-            "Select Row ID to Edit",
-            project_df.index.tolist()
-        )
+        with col_b:
+            row_to_edit = st.selectbox(
+                "Select Row ID to Edit",
+                project_df.index.tolist()
+            )
+
+        st.dataframe(project_df, use_container_width=True, height=220)
 
         row_data = df.loc[row_to_edit]
 
         with st.form("edit_task_form"):
-            unit_edit = st.text_input(
-                "Unit",
-                value=str(row_data["Unit"])
-            )
+            col1, col2, col3 = st.columns(3)
 
-            resource_edit = st.text_input(
-                "Resource Name",
-                value=str(row_data["Resource_Name"])
-            )
+            with col1:
+                unit_edit = st.text_input(
+                    "Unit",
+                    value=str(row_data["Unit"])
+                )
+                resource_edit = st.text_input(
+                    "Resource Name",
+                    value=str(row_data["Resource_Name"])
+                )
+                submission_date_edit = st.date_input(
+                    "Submission Date",
+                    parse_date_ddmmyy(row_data["Submission_date"])
+                )
 
-            submission_date_edit = st.date_input(
-                "Submission Date",
-                parse_date_ddmmyy(row_data["Submission_date"])
-            )
+            with col2:
+                plan_date_edit = st.date_input(
+                    "Planned Date",
+                    parse_date_ddmmyy(row_data["Plan_date"])
+                )
 
-            plan_date_edit = st.date_input(
-                "Planned Date",
-                parse_date_ddmmyy(row_data["Plan_date"])
-            )
+                status_list = [
+                    "Not Started",
+                    "In Progress",
+                    "Completed"
+                ]
 
-            status_list = [
-                "Not Started",
-                "In Progress",
-                "Completed"
-            ]
+                current_status = str(row_data["Status"])
+                status_index = (
+                    status_list.index(current_status)
+                    if current_status in status_list
+                    else 0
+                )
 
-            current_status = str(row_data["Status"])
+                status_edit = st.selectbox(
+                    "Status",
+                    status_list,
+                    index=status_index
+                )
 
-            status_index = (
-                status_list.index(current_status)
-                if current_status in status_list
-                else 0
-            )
+                work_type_list = ["Fresh", "Revision"]
+                current_work_type = str(row_data["Work_Type"])
 
-            status_edit = st.selectbox(
-                "Status",
-                status_list,
-                index=status_index
-            )
+                work_type_index = (
+                    work_type_list.index(current_work_type)
+                    if current_work_type in work_type_list
+                    else 0
+                )
 
-            work_type_list = ["Fresh", "Revision"]
+                work_type_edit = st.selectbox(
+                    "Work Type",
+                    work_type_list,
+                    index=work_type_index
+                )
 
-            current_work_type = str(row_data["Work_Type"])
+            with col3:
+                priority_list = [1, 2, 3, 4, 5]
 
-            work_type_index = (
-                work_type_list.index(current_work_type)
-                if current_work_type in work_type_list
-                else 0
-            )
+                try:
+                    current_priority = int(row_data["Priority"])
+                except Exception:
+                    current_priority = 1
 
-            work_type_edit = st.selectbox(
-                "Work Type",
-                work_type_list,
-                index=work_type_index
-            )
+                priority_index = (
+                    priority_list.index(current_priority)
+                    if current_priority in priority_list
+                    else 0
+                )
 
-            comments_edit = st.text_area(
-                "Comments",
-                value=str(row_data["Comments"])
-            )
+                priority_edit = st.selectbox(
+                    "Priority",
+                    priority_list,
+                    index=priority_index
+                )
 
-            priority_list = [1, 2, 3, 4, 5]
+                comments_edit = st.text_area(
+                    "Comments",
+                    value=str(row_data["Comments"]),
+                    height=90
+                )
 
-            try:
-                current_priority = int(row_data["Priority"])
-            except Exception:
-                current_priority = 1
-
-            priority_index = (
-                priority_list.index(current_priority)
-                if current_priority in priority_list
-                else 0
-            )
-
-            priority_edit = st.selectbox(
-                "Priority",
-                priority_list,
-                index=priority_index
-            )
-
-            remarks_edit = st.text_area(
-                "Remarks",
-                value=str(row_data["Remarks"])
-            )
+                remarks_edit = st.text_area(
+                    "Remarks",
+                    value=str(row_data["Remarks"]),
+                    height=90
+                )
 
             submitted_edit = st.form_submit_button("Update Task")
 
@@ -273,7 +407,7 @@ with tab2:
             st.rerun()
 
 
-# ---------------- TAB 3: ADD NEW UNIT ----------------
+# ---------------- TAB 3 ----------------
 with tab3:
     st.subheader("Add New Unit to Existing Project")
 
@@ -300,60 +434,70 @@ with tab3:
         )
 
         with st.form("add_unit_form"):
-            client_name_new = st.text_input(
-                "Client Name",
-                value=default_client,
-                disabled=True
-            )
+            col1, col2, col3 = st.columns(3)
 
-            project_name_new = st.text_input(
-                "Project Name",
-                value=selected_project_for_new_unit,
-                disabled=True
-            )
+            with col1:
+                client_name_new = st.text_input(
+                    "Client Name",
+                    value=default_client,
+                    disabled=True
+                )
 
-            unit_new = st.text_input("New Unit Name")
-            resource_new = st.text_input("Assigned Resource")
+                project_name_new = st.text_input(
+                    "Project Name",
+                    value=selected_project_for_new_unit,
+                    disabled=True
+                )
 
-            submission_date_new = st.date_input(
-                "Submission Date",
-                date.today(),
-                key="new_unit_submission_date"
-            )
+                unit_new = st.text_input("New Unit Name")
 
-            plan_date_new = st.date_input(
-                "Planned Date",
-                date.today(),
-                key="new_unit_plan_date"
-            )
+            with col2:
+                resource_new = st.text_input("Assigned Resource")
+                submission_date_new = st.date_input(
+                    "Submission Date",
+                    date.today(),
+                    key="new_unit_submission_date"
+                )
+                plan_date_new = st.date_input(
+                    "Planned Date",
+                    date.today(),
+                    key="new_unit_plan_date"
+                )
 
-            status_new = st.selectbox(
-                "Status",
-                ["Not Started", "In Progress", "Completed"],
-                key="new_unit_status"
-            )
+            with col3:
+                status_new = st.selectbox(
+                    "Status",
+                    ["Not Started", "In Progress", "Completed"],
+                    key="new_unit_status"
+                )
 
-            work_type_new = st.selectbox(
-                "Work Type",
-                ["Fresh", "Revision"],
-                key="new_unit_work_type"
-            )
+                work_type_new = st.selectbox(
+                    "Work Type",
+                    ["Fresh", "Revision"],
+                    key="new_unit_work_type"
+                )
 
-            comments_new = st.text_area(
-                "Comments",
-                key="new_unit_comments"
-            )
+                priority_new = st.selectbox(
+                    "Priority",
+                    [1, 2, 3, 4, 5],
+                    key="new_unit_priority"
+                )
 
-            priority_new = st.selectbox(
-                "Priority",
-                [1, 2, 3, 4, 5],
-                key="new_unit_priority"
-            )
+            col4, col5 = st.columns(2)
 
-            remarks_new = st.text_area(
-                "Remarks",
-                key="new_unit_remarks"
-            )
+            with col4:
+                comments_new = st.text_area(
+                    "Comments",
+                    height=90,
+                    key="new_unit_comments"
+                )
+
+            with col5:
+                remarks_new = st.text_area(
+                    "Remarks",
+                    height=90,
+                    key="new_unit_remarks"
+                )
 
             add_unit_submitted = st.form_submit_button("Add Unit")
 
@@ -376,14 +520,14 @@ with tab3:
             st.rerun()
 
 
-# ---------------- TAB 4: VIEW TASKS ----------------
+# ---------------- TAB 4 ----------------
 with tab4:
     st.subheader("Current Task Table")
 
     if df.empty:
         st.info("No tasks found.")
     else:
-        st.dataframe(df, use_container_width=True)
+        st.dataframe(df, use_container_width=True, height=500)
 
         output = io.BytesIO()
 
