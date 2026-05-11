@@ -170,6 +170,11 @@ def prepare_dashboard_data(df):
         (dash_df["Status"] != "Completed")
     )
 
+    dash_df["Priority"] = pd.to_numeric(
+        dash_df["Priority"],
+        errors="coerce"
+    ).fillna(0).astype(int)
+
     return dash_df
 sheet = connect_to_sheet()
 df = load_data(sheet)
@@ -781,7 +786,7 @@ with tab5:
 
         high_priority_df = dash_df[
             (dash_df["Status"] != "Completed") &
-            (dash_df["Priority"].astype(str).isin(["1", "2"]))
+            (dash_df["Priority"].isin([1, 2]))
         ][[
             "Project_name",
             "Unit",
