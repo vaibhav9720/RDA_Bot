@@ -108,12 +108,12 @@ st.markdown("""
 
 # ---------------- FUNCTIONS ----------------
 def format_date_ddmmyy(input_date):
-    return input_date.strftime("%d%m%y")
+    return input_date.strftime("%d/%m/%Y")
 
 
 def parse_date_ddmmyy(value):
     try:
-        return pd.to_datetime(str(value), format="%d%m%y").date()
+        return pd.to_datetime(str(value),format="%d/%m/%Y").date()
     except Exception:
         return date.today()
 
@@ -136,13 +136,13 @@ def prepare_dashboard_data(df):
 
     dash_df["Plan_Date_Parsed"] = pd.to_datetime(
         dash_df["Plan_date"].astype(str),
-        format="%d%m%y",
+        format="%d/%m/%Y",
         errors="coerce"
     )
 
     dash_df["Submission_Date_Parsed"] = pd.to_datetime(
         dash_df["Submission_date"].astype(str),
-        format="%d%m%y",
+        format="%d/%m/%Y",
         errors="coerce"
     )
 
