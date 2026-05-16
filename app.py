@@ -98,14 +98,6 @@ st.markdown("""
         box-shadow: 0 8px 20px rgba(0,0,0,0.12);
     }
 
-    .section-card {
-        background-color: #f9fafb;
-        padding: 18px;
-        border-radius: 16px;
-        border: 1px solid #e5e7eb;
-        margin-bottom: 18px;
-    }
-
     label {
         font-weight: 600 !important;
         color: #374151 !important;
@@ -137,6 +129,7 @@ def connect_to_sheet():
 def load_data(sheet):
     data = sheet.get_all_records()
     return pd.DataFrame(data)
+
 
 def prepare_dashboard_data(df):
     dash_df = df.copy()
@@ -176,13 +169,25 @@ def prepare_dashboard_data(df):
     ).fillna(0).astype(int)
 
     return dash_df
+
+
+def rename_plan_date_for_display(input_df):
+    return input_df.rename(
+        columns={
+            "Plan_date": "Mech Input Availability Date"
+        }
+    )
+
+
 sheet = connect_to_sheet()
 df = load_data(sheet)
 
 
 # ---------------- HEADER ----------------
 st.title("RDA Firm Project Assistant")
-st.caption("Manage project tasks, priorities, revisions and planned completion dates.")
+st.caption(
+    "Manage project tasks, priorities, revisions and mech input availability dates."
+)
 
 if not df.empty:
     col1, col2, col3, col4 = st.columns(4)
@@ -240,16 +245,28 @@ with tab1:
 
         with col2:
             resource_name = st.text_input("Resource Name")
-            submission_date = st.date_input("Date of Submission", date.today())
-            plan_date = st.date_input("Planned Date", date.today())
+            submission_date = st.date_input(
+                "Date of Submission",
+                date.today()
+            )
+            plan_date = st.date_input(
+                "Mech Input Availability Date",
+                date.today()
+            )
 
         with col3:
             status = st.selectbox(
                 "Status",
                 ["Not Started", "In Progress", "Completed"]
             )
-            work_type = st.selectbox("Work Type", ["Fresh", "Revision"])
-            priority = st.selectbox("Priority", [1, 2, 3, 4, 5])
+            work_type = st.selectbox(
+                "Work Type",
+                ["Fresh", "Revision"]
+            )
+            priority = st.selectbox(
+                "Priority",
+                [1, 2, 3, 4, 5]
+            )
 
         col4, col5 = st.columns(2)
 
@@ -327,7 +344,11 @@ with tab2:
                 project_df.index.tolist()
             )
 
-        st.dataframe(project_df, use_container_width=True, height=220)
+        st.dataframe(
+            rename_plan_date_for_display(project_df),
+            use_container_width=True,
+            height=220
+        )
 
         row_data = df.loc[row_to_edit]
 
@@ -350,7 +371,7 @@ with tab2:
 
             with col2:
                 plan_date_edit = st.date_input(
-                    "Planned Date",
+                    "Mech Input Availability Date",
                     parse_date_ddmmyy(row_data["Plan_date"])
                 )
 
@@ -491,13 +512,15 @@ with tab3:
 
             with col2:
                 resource_new = st.text_input("Assigned Resource")
+
                 submission_date_new = st.date_input(
                     "Submission Date",
                     date.today(),
                     key="new_unit_submission_date"
                 )
+
                 plan_date_new = st.date_input(
-                    "Planned Date",
+                    "Mech Input Availability Date",
                     date.today(),
                     key="new_unit_plan_date"
                 )
@@ -565,12 +588,19 @@ with tab4:
     if df.empty:
         st.info("No tasks found.")
     else:
-        st.dataframe(df, use_container_width=True, height=500)
+        st.dataframe(
+            rename_plan_date_for_display(df),
+            use_container_width=True,
+            height=500
+        )
 
         output = io.BytesIO()
 
         with pd.ExcelWriter(output, engine="openpyxl") as writer:
-            df.to_excel(writer, index=False)
+            rename_plan_date_for_display(df).to_excel(
+                writer,
+                index=False
+            )
 
         st.download_button(
             label="Download Excel",
@@ -578,7 +608,9 @@ with tab4:
             file_name="project_tasks.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
-# ---------------- TAB 5: DASHBOARD ----------------
+
+
+# ---------------- TAB 5 ----------------
 with tab5:
     st.subheader("Project Dashboard")
 
@@ -596,7 +628,6 @@ with tab5:
             dash_df[dash_df["Status"] != "Completed"]
         )
         overdue_tasks = dash_df["Is_Overdue"].sum()
-        approaching_tasks = dash_df["Approaching_Deadline"].sum()
 
         completion_rate = round(
             (completed_tasks / total_tasks) * 100, 1
@@ -626,7 +657,7 @@ with tab5:
         col1, col2 = st.columns(2)
 
         with col1:
-            st.markdown("### Projects Approaching Deadline")
+            st.markdown("### Projects Approaching Mech Input Date")
 
             deadline_df = dash_df[
                 dash_df["Approaching_Deadline"]
@@ -640,8 +671,10 @@ with tab5:
                 "Status"
             ]].sort_values("Days_Left")
 
+            deadline_df = rename_plan_date_for_display(deadline_df)
+
             if deadline_df.empty:
-                st.success("No projects approaching deadline.")
+                st.success("No projects approaching mech input date.")
             else:
                 st.dataframe(
                     deadline_df,
@@ -650,7 +683,7 @@ with tab5:
                 )
 
         with col2:
-            st.markdown("### Overdue Tasks")
+            st.markdown("### Overdue Mech Input Items")
 
             overdue_df = dash_df[
                 dash_df["Is_Overdue"]
@@ -664,8 +697,10 @@ with tab5:
                 "Status"
             ]].sort_values("Days_Left")
 
+            overdue_df = rename_plan_date_for_display(overdue_df)
+
             if overdue_df.empty:
-                st.success("No overdue tasks.")
+                st.success("No overdue mech input items.")
             else:
                 st.dataframe(
                     overdue_df,
@@ -719,7 +754,10 @@ with tab5:
                         "Status",
                         lambda x: (x != "Completed").sum()
                     ),
-                    Avg_Priority=("Priority", lambda x: round(x.mean(), 1)),
+                    Avg_Priority=(
+                        "Priority",
+                        lambda x: round(x.mean(), 1)
+                    ),
                     Overdue_Tasks=("Is_Overdue", "sum")
                 )
                 .reset_index()
@@ -796,6 +834,10 @@ with tab5:
             "Status",
             "Comments"
         ]]
+
+        high_priority_df = rename_plan_date_for_display(
+            high_priority_df
+        )
 
         if high_priority_df.empty:
             st.success("No high-priority pending work.")
